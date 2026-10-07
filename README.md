@@ -690,6 +690,7 @@ What this does not cover is listed under Limitations.
 ## Limitations
 - Each piece request opens a new TCP connection; connections to a peer are not reused.
 - An interrupted download starts from scratch; partial files are not resumed.
+- A download asks the tracker for peers once, when it starts, and asks each peer what it has at the start and again only when it is stuck. Peers that join later, and pieces a peer gains meanwhile, are not used by a download that is already running.
 - Two operations accepted by different trackers at the same moment (or on both sides of a partition) may be applied in a different order on each tracker; there is no conflict resolution beyond the checks each command makes.
 - A session whose tracker crashed stays marked as logged in until that user logs in again (the client does this by itself when it fails over).
 - Login attempts are not limited. Passwords can be guessed online, and every attempt costs the tracker about 0.15 s of CPU.
