@@ -1,0 +1,512 @@
+<div class="cover">
+  <div class="band">
+    <div class="kicker">Advanced Operating Systems · Assignment 3 · Technical Report</div>
+    <div class="title">Peer-to-Peer Distributed<br>File Sharing System</div>
+    <div class="sub">Two synchronised trackers, clients that download from many peers at once, and a security layer on every connection.</div>
+  </div>
+
+  <div class="who">
+    <span>Name</span><span>Shubham Kumar Sunny</span>
+    <span>Roll number</span><span>2025201025</span>
+    <span>Institute</span><span>International Institute of Information Technology, Hyderabad</span>
+    <span>Language</span><span>C++11, POSIX sockets and threads, OpenSSL</span>
+    <span>Report version</span><span>October 2026 (describes the code as it is now)</span>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><b>2</b><span>trackers that hold the same information</span></div>
+    <div class="tile"><b>512 KB</b><span>piece size; every piece checked with SHA-1</span></div>
+    <div class="tile"><b>4</b><span>pieces of one file in flight at the same time</span></div>
+    <div class="tile"><b>8 + 8</b><span>worker threads: download pool and seeder pool</span></div>
+    <div class="tile"><b>7.8 s</b><span>to download a 1 GB file (measured, section 10)</span></div>
+    <div class="tile"><b>12 MB</b><span>peak client memory during that 1 GB download</span></div>
+    <div class="tile"><b>0</b><span>memory leaks reported by the leak checker</span></div>
+    <div class="tile"><b>≈ 2,800</b><span>lines of C++ in tracker and client</span></div>
+  </div>
+
+  <p class="abstract">This report explains how the system is built and why. It is written in plain language: each section starts with the idea, shows a picture, and only then names the functions in the code. Sections 2–7 cover what the assignment asks for. Section 8 covers security work that goes beyond the assignment. Sections 9–11 cover the problems met on the way, the tests, and what is still missing.</p>
+
+  <div class="toc">
+    <div><b>1</b> The system in one page</div>
+    <div><b>2</b> Design overview</div>
+    <div><b>3</b> Network protocols</div>
+    <div><b>4</b> Files, pieces and integrity</div>
+    <div><b>5</b> The download engine and piece selection</div>
+    <div><b>6</b> Tracker synchronisation</div>
+    <div><b>7</b> Threads and locks</div>
+    <div><b>8</b> Security (beyond the assignment)</div>
+    <div><b>9</b> Challenges and how they were solved</div>
+    <div><b>10</b> Testing and results</div>
+    <div><b>11</b> Limitations and future work</div>
+    <div><b>12</b> References</div>
+  </div>
+
+  <div class="foot">Source layout: <code>tracker/</code> · <code>client/</code> · <code>README.md</code> (how to run and check everything, with screenshots) · <code>tools/</code> · <code>report/</code> (source of this report)</div>
+</div>
+
+<!-- ================================================================ 1 -->
+<section class="page">
+<h1><span class="n">1</span>The system in one page</h1>
+
+<p class="lead">People form groups and share files inside a group. The files are not stored on a server. They stay on the computers of the people who have them.</p>
+
+<p>There are two kinds of program.</p>
+<ul>
+  <li><b>The tracker</b> is a small server that remembers <i>who exists</i> and <i>who has what</i>: users, groups, the hashes of each shared file, and the address of every client that is online. It never touches file data. There are two trackers, so one can stop without stopping the system.</li>
+  <li><b>The client</b> is what a user runs. It is three things at once: a <b>shell</b> for typing commands, a <b>downloader</b> that fetches pieces of a file from several other clients at the same time, and a <b>seeder</b> that gives the pieces it has to others.</li>
+</ul>
+
+{{fig:architecture|The whole system. Blue lines carry small text messages (accounts, groups, "who has this file?"). Orange lines carry the actual file, cut into pieces, directly from client to client.}}
+
+<h2>What happens when Bob downloads a file</h2>
+<ol>
+  <li>Bob types <code>download_file movies movie.bin .</code></li>
+  <li>His client asks a tracker. The tracker checks that Bob is a member of the group and answers with the file size, the SHA-1 hash of the file and of every 512 KB piece, and the addresses of the clients that have it.</li>
+  <li>Bob's client asks each of those clients which pieces it has.</li>
+  <li>It fetches four pieces at a time, from different clients, the rarest pieces first. Each piece is checked against its hash as soon as it arrives. A bad piece is thrown away and fetched from someone else.</li>
+  <li>When all pieces are in, the whole file is hashed once more and the file appears under its final name.</li>
+  <li>From the first verified piece on, Bob's client is itself a seeder for that file.</li>
+</ol>
+
+<h2>How the assignment's requirements are met</h2>
+<table>
+<tr><th style="width:39%">The assignment asks for</th><th>How it is done</th><th style="width:15%">Section</th></tr>
+<tr><td>Exactly two trackers with the same state</td><td>Every change is a numbered operation, written to a log and forwarded to the other tracker</td><td>6</td></tr>
+<tr><td>Keeps working with one tracker; a returning tracker catches up</td><td>Clients switch trackers by themselves; missed operations are resent from the log</td><td>6</td></tr>
+<tr><td>512 KB pieces; SHA-1 per piece and per file</td><td>Hashes computed at upload, kept by the tracker, checked at download</td><td>4</td></tr>
+<tr><td>Files up to 1 GB without excessive memory</td><td>One 512 KB buffer at a time; 12 MB peak measured for 1 GB</td><td>4, 10</td></tr>
+<tr><td>Corrupted pieces fetched again from another peer</td><td>Per-piece check, per-peer failure counters, retry queue</td><td>5</td></tr>
+<tr><td>One file from several peers; several files at once</td><td>Fixed thread pool shared by all downloads, 4 pieces per file in flight</td><td>5, 7</td></tr>
+<tr><td>Custom TCP protocols that survive partial sends</td><td>Three small protocols; every send and receive loops until complete</td><td>3</td></tr>
+<tr><td>Thread-safe shared data; no leaks; sockets closed</td><td>Six mutexes with a fixed order; clean shutdown; 0 leaks measured</td><td>7, 10</td></tr>
+<tr><td>The 14 commands, the launch format, <code>[C] [group_id] filename</code></td><td>Implemented exactly as written in the assignment</td><td>2</td></tr>
+</table>
+</section>
+
+<!-- ================================================================ 2 -->
+<section>
+<h1><span class="n">2</span>Design overview</h1>
+
+<h2>The main design decision: split "what" from "where"</h2>
+<p>Information about files (names, sizes, hashes, who has them) is tiny. The files themselves are huge. So the two are handled by different parts:</p>
+<ul>
+  <li><b>Small and must be consistent → the trackers.</b> Everything is kept in memory behind one lock. Simple to get right.</li>
+  <li><b>Large and must be fast → client to client.</b> The trackers are never in the path of file data, so they cannot become a bottleneck.</li>
+</ul>
+
+<h2>The modules</h2>
+<table>
+<tr><th style="width:27%">File</th><th>Its one job</th></tr>
+<tr><td><code>tracker/server.cpp</code></td><td>Sockets and threads: accept connections, one thread per client, the link to the other tracker, <code>quit</code></td></tr>
+<tr><td><code>tracker/commands.cpp</code></td><td>The "brain": all the data, every command, the permission checks, the operation log</td></tr>
+<tr><td><code>tracker/password.cpp</code></td><td>Turns passwords into salted, slow hashes</td></tr>
+<tr><td><code>tracker/tls.cpp</code></td><td>TLS for the tracker's connections</td></tr>
+<tr><td><code>client/client.cpp</code></td><td>The shell: reads commands, talks to the tracker, switches tracker when one dies</td></tr>
+<tr><td><code>client/peer.cpp</code></td><td>The seeder and the download engine (the largest and hardest file)</td></tr>
+<tr><td><code>client/threadpool.cpp</code></td><td>A fixed-size pool of worker threads</td></tr>
+<tr><td><code>client/fileutils.cpp</code></td><td>SHA-1 of a buffer; piece hashes and whole-file hash of a file</td></tr>
+<tr><td><code>client/tls.cpp</code></td><td>TLS for the client's connections; this client's own key pair</td></tr>
+</table>
+
+<p>The split inside the tracker matters: <code>server.cpp</code> knows nothing about users or groups, and <code>commands.cpp</code> knows nothing about sockets. A command arrives as a line of text and leaves as a line of text. That made it possible to replay the same commands from a log file and from the other tracker without any extra code.</p>
+
+<h2>The commands</h2>
+<p>All commands of the assignment are implemented with the exact names and arguments given there:</p>
+<pre>create_user  login  logout  create_group  join_group  leave_group  list_groups
+list_requests  accept_request  upload_file  list_files  download_file
+show_downloads  stop_share
+
+./tracker tracker_info.txt &lt;tracker_no&gt;        ./client &lt;IP&gt;:&lt;PORT&gt; tracker_info.txt</pre>
+<p>Two small additions help when demonstrating: <code>verbose on</code> prints every piece as it moves, and <code>help</code> lists the commands.</p>
+
+<h2>What the tracker remembers</h2>
+<table>
+<tr><th style="width:36%">Data structure</th><th>Meaning</th><th style="width:30%">Why this container</th></tr>
+<tr><td><code>map&lt;string, User&gt; users</code></td><td>user → password hash, logged-in flag</td><td>look-up by name</td></tr>
+<tr><td><code>map&lt;string, string&gt; groups</code></td><td>group → owner</td><td>look-up by name</td></tr>
+<tr><td><code>map&lt;string, set&lt;string&gt;&gt; members</code></td><td>group → its members</td><td>"is X a member?" is asked constantly; a set answers quickly and stays sorted</td></tr>
+<tr><td><code>map&lt;string, vector&lt;string&gt;&gt; requests</code></td><td>group → pending join requests</td><td>kept in arrival order</td></tr>
+<tr><td><code>map&lt;string, vector&lt;FileMeta&gt;&gt; group_files</code></td><td>group → files: size, file hash, piece hashes, set of seeders</td><td>few files per group; a list is enough</td></tr>
+<tr><td><code>map&lt;string, string&gt; seeder_addr</code></td><td>user → address and key fingerprint, only while logged in</td><td>look-up by name</td></tr>
+<tr><td><code>conn_user</code>, <code>user_conn</code></td><td>connection ↔ logged-in user</td><td>both directions are needed</td></tr>
+</table>
+
+<div class="note"><p><b>Who you are is decided by the tracker, not by what you send.</b> A login is tied to the connection it arrived on. Every later command on that connection is checked against that user. A client cannot act as someone else by simply writing another name into a command.</p></div>
+</section>
+
+<!-- ================================================================ 3 -->
+<section>
+<h1><span class="n">3</span>Network protocols</h1>
+
+<p class="lead">TCP delivers bytes in order, but it does not tell the receiver where one message ends and the next begins. Deciding that is called <i>framing</i>, and it is the heart of protocol design.</p>
+
+<h2>Two kinds of framing, each where it fits</h2>
+{{fig:framing|The two message formats. Text is used where a human may want to read or type it. A length prefix is used where the content can be any byte.}}
+
+<table>
+<tr><th style="width:20%">Format</th><th style="width:30%">Used for</th><th>Why</th></tr>
+<tr><td>A line of text; a reply ends with a line <code>END</code></td><td>client ↔ tracker, tracker ↔ tracker, and the request line between clients</td><td>Easy to read in logs and to type by hand when debugging. The same text is written to the operation log.</td></tr>
+<tr><td>4-byte length, then data</td><td>the reply that carries a piece or a bitfield</td><td>File data can contain any byte, including a newline, so "read until newline" cannot work. The receiver knows exactly how many bytes to wait for.</td></tr>
+</table>
+
+<h2>The three conversations</h2>
+<h3>1. Client → tracker</h3>
+<pre>client:   LOGIN alice pw1                     client:   DOWNLOAD_FILE movies movie.bin
+tracker:  Login successful                    tracker:  movie.bin 1300000 &lt;file sha1&gt; 3
+          END                                           &lt;sha1 of piece 0&gt;
+                                                        &lt;sha1 of piece 1&gt;
+                                                        &lt;sha1 of piece 2&gt;
+                                                        127.0.0.1:5001 &lt;alice's key fingerprint&gt;
+                                                        END</pre>
+<p>The client turns what the user types into a request that names the acting user (<code>create_group movies</code> becomes <code>CREATE_GROUP movies alice</code>). The same form is used in the log and between trackers, so one parser serves all three.</p>
+
+<h3>2. Client → client</h3>
+<pre>GET_BITFIELD movie.bin movies      →   00 00 00 03  '1' '1' '0'     (which pieces I have)
+GET_PIECE movie.bin 2 movies       →   00 03 D6 20  &lt;251,424 bytes&gt;
+anything not allowed               →   FF FF FF FF</pre>
+<p>One request per connection, then close. This keeps the protocol free of state: nothing can get out of step. The price is a new connection per piece (section 11).</p>
+
+<h3>3. Tracker → tracker</h3>
+<pre>TRACKER_HELLO          →   HAVE 4            ("I have your operations 1 to 4")
+OP 5 CREATE_GROUP movies alice
+OP 6 JOIN_GROUP movies bob                   (a stream of numbered operations)</pre>
+
+<h2>Status and error messages</h2>
+<p>Every request gets an answer a person can read: <code>Login failed</code>, <code>No group</code>, <code>User not in group</code>, <code>Only the group owner can accept requests</code>, <code>Permission denied: you are logged in as bob</code>. Between clients there is exactly one error code, the length <code>FF FF FF FF</code>, which can never be a real piece length.</p>
+
+<h2>Things that go wrong on a network, and the answer to each</h2>
+<table>
+<tr><th style="width:34%">Problem</th><th>What the code does</th></tr>
+<tr><td>A send or receive transfers only part of the data</td><td>Every send and receive is a loop that continues until the whole message is through (<code>send_all</code>, <code>recv_all</code>, <code>read_from_socket</code>, <code>write_to_socket</code>)</td></tr>
+<tr><td>A peer goes silent in the middle</td><td>5-second limit on every read and write; a timeout counts as a failure of that peer</td></tr>
+<tr><td>Connecting to a dead machine hangs for a minute</td><td>Non-blocking connect, wait with <code>poll</code> for at most 5 seconds</td></tr>
+<tr><td>Writing to a closed connection kills the program (SIGPIPE)</td><td>The signal is ignored; the write returns an error that is handled</td></tr>
+<tr><td>A request line that never ends</td><td>Length limits: 1 KB for a peer request, 16 MB for a tracker line</td></tr>
+<tr><td>The tracker disappears</td><td>The client connects to the other one, logs in again and repeats the request</td></tr>
+</table>
+</section>
+
+<!-- ================================================================ 4 -->
+<section>
+<h1><span class="n">4</span>Files, pieces and integrity</h1>
+
+<p class="lead">A file is cut into pieces of 512 KB. Each piece gets its own fingerprint (a SHA-1 hash), and the whole file gets one more.</p>
+
+{{fig:pieces|What happens at <code>upload_file</code>. Only the small purple and blue information goes to the tracker. The file stays where it is.}}
+
+<h2>Why pieces</h2>
+<ul>
+  <li><b>Speed:</b> different pieces can come from different clients at the same time.</li>
+  <li><b>Cheap repair:</b> if one piece arrives damaged, only that 512 KB is fetched again.</li>
+  <li><b>Sharing early:</b> a client that has half the file can already give that half to others.</li>
+</ul>
+
+<h2>The arithmetic</h2>
+<pre>number of pieces  =  (size + 524287) / 524288           (rounded-up division)
+offset of piece i =  i × 524288
+length of piece i =  min(524288, size − i × 524288)     (only the last one can be shorter)</pre>
+<p>A 1 GB file has 2,048 pieces. An empty file has 0 pieces and is handled as a normal case.</p>
+
+<h2>Why two levels of hashing</h2>
+<table>
+<tr><th style="width:24%">Check</th><th style="width:30%">When</th><th>What it catches</th></tr>
+<tr><td>SHA-1 of each piece</td><td>the moment the piece arrives, before it is written</td><td>a damaged or false piece, immediately, and tells us which peer sent it</td></tr>
+<tr><td>SHA-1 of the whole file</td><td>once, after the last piece</td><td>anything the piece checks could miss, for example a piece written to the wrong place</td></tr>
+</table>
+
+<h2>Large files without large memory</h2>
+<p>The client never holds a file in memory. To hash a file it reads one 512 KB buffer at a time and feeds it to two hash calculations at once (the piece's and the whole file's). While downloading, each worker thread holds one piece. With 4 pieces in flight that is about 2 MB of file data, whatever the file size. The measurement in section 10 shows 12 MB in total for a 1 GB file.</p>
+
+<h2>Writing the downloaded file safely</h2>
+<table>
+<tr><th style="width:36%">Danger</th><th>What the code does</th></tr>
+<tr><td>Pieces arrive in any order</td><td>The file is first created at its full size. Each piece is written at its own offset.</td></tr>
+<tr><td>Several threads write the same file</td><td><code>pwrite</code> writes at a given offset in one step. There is no shared "current position" that two threads could fight over.</td></tr>
+<tr><td>A download fails half way</td><td>Pieces go into <code>name.part</code>. Only a complete, verified file is renamed to <code>name</code>. A failed download deletes its <code>.part</code> file, so a half-written file is never left behind.</td></tr>
+</table>
+</section>
+
+<!-- ================================================================ 5 -->
+<section>
+<h1><span class="n">5</span>The download engine and piece selection</h1>
+
+<p class="lead">This is the central part of the assignment: fetch one file from several peers at the same time, choose pieces sensibly, and keep going when peers misbehave.</p>
+
+<h2>Step 1: find out who has what</h2>
+<p>The tracker says which clients share the file. It does not say which <i>pieces</i> each one has, and that matters: a client that is still downloading has only some of them. So the downloader first asks every peer for its <b>bitfield</b>, one character per piece (<code>1</code> = have it, <code>0</code> = do not).</p>
+
+<h2>Step 2: piece selection — rarest first</h2>
+<p>The pieces are sorted by how many peers have them, fewest first.</p>
+
+{{fig:rarest|Rarest-first with three peers. Pieces 4 and 5 exist on one peer only, so they are fetched first.}}
+
+<p><b>Why rarest first?</b> If the only peer holding pieces 4 and 5 leaves, nobody can finish the file. Fetching those first means that very soon two clients have them. The rare pieces stop being rare. Common pieces can wait, because there will always be someone to get them from.</p>
+<p><b>Why a random order among equals?</b> If two clients start together and both see "pieces 4 and 5 are rarest", a fixed order makes both fetch piece 4 first. Then they hold the same piece and have nothing to give each other. With a random order one probably takes 4 and the other 5, and each can then serve the other.</p>
+<p><b>How it is done:</b> shuffle the list of pieces, then sort it by count with a <i>stable</i> sort. A stable sort keeps the shuffled order among pieces with equal counts. Pieces that nobody has yet go to the very end.</p>
+
+<h2>Step 3: fetch pieces in parallel</h2>
+{{fig:piece_flow|The life of one piece. The left column is the normal path. The red box is what happens on any failure.}}
+
+<h3>Choosing the peer for a piece</h3>
+<p>Among the peers that have the piece, the one with the fewest requests currently open from this download is chosen. This spreads the work over all peers without measuring anyone's speed.</p>
+
+<h3>Sharing the worker threads fairly</h3>
+<p>All downloads use one pool of 8 threads. A piece task downloads <i>one</i> piece and then puts itself at the back of the pool's queue. So if three files are downloading, their tasks take turns. One huge file cannot starve a small one, and the shell stays responsive because nothing runs on its thread.</p>
+
+<h2>What happens when peers fail</h2>
+<table>
+<tr><th style="width:33%">Situation</th><th>Result</th></tr>
+<tr><td>A piece arrives with a wrong hash</td><td>It is thrown away. That peer is not asked for that piece again. The piece is fetched from another peer.</td></tr>
+<tr><td>A peer stops answering</td><td>Each open request fails after 5 seconds. After 3 failures in a row the peer is dropped for this download.</td></tr>
+<tr><td>A peer deleted its copy</td><td>It answers "refused" to everything. It is never chosen.</td></tr>
+<tr><td>Nobody has a piece right now</td><td>The task waits one second and asks all peers for their bitfields again. Peers that are still downloading gain pieces over time.</td></tr>
+<tr><td>No good peer is left</td><td>The download ends as failed: <code>[F]</code> in <code>show_downloads</code>, the <code>.part</code> file is deleted, and the tracker is told this client no longer shares the file.</td></tr>
+</table>
+
+<h2>Seeding, including while still downloading</h2>
+<p>The seeder gives out only two things: files in its <b>share table</b> (files this client uploaded or finished downloading), and <b>verified pieces of downloads that are still running</b>. The second point is what makes the system truly peer-to-peer: two clients downloading the same file exchange pieces with each other while both are still incomplete. A request for any other name or path is refused.</p>
+</section>
+
+<!-- ================================================================ 6 -->
+<section>
+<h1><span class="n">6</span>Tracker synchronisation</h1>
+
+<p class="lead">Both trackers must give the same answers. The method: do not copy the data, copy the <i>commands</i>.</p>
+
+<h2>The idea</h2>
+<p>If two trackers start empty and apply the same commands in the same order, they end up with the same data. This works because the commands are <b>deterministic</b>: the result depends only on the current data and the command text. There is no randomness and no clock inside them. (This technique is known as <i>state machine replication</i>.)</p>
+<p>So whenever a client's command changes something, the tracker that accepted it does three things: applies it, writes it to a log file, and sends it to the other tracker. Commands that change nothing (<code>list_groups</code>, a failed login) are not logged and not sent.</p>
+
+<h2>The operation log</h2>
+{{fig:oplog|<code>oplog.txt</code>. Each tracker numbers the operations it accepted from its own clients. The first two columns together identify an operation.}}
+
+<h2>Catching up after the trackers were separated</h2>
+<p>The interesting case is when one tracker was down, or the network between them was cut, while the other kept working. Sequence numbers solve this. Each tracker needs only three small variables:</p>
+<table class="keep">
+<tr><th style="width:18%">Variable</th><th>Meaning</th></tr>
+<tr><td><code>my_seq</code></td><td>the number of the last operation I accepted from my own clients</td></tr>
+<tr><td><code>peer_seq</code></td><td>"I have applied all of the other tracker's operations up to this number, with no gaps" — this is what <code>HAVE</code> reports</td></tr>
+<tr><td><code>peer_ahead</code></td><td>operations of the other tracker that I have applied beyond <code>peer_seq</code> (they can arrive out of order after a restart)</td></tr>
+</table>
+
+
+
+
+
+{{fig:sync|How Tracker 2 gets the operations it missed. Each tracker keeps one outgoing link to the other, so the same conversation also runs in the opposite direction.}}
+
+<div class="note"><p><b>The subtle part: nothing may slip between "resend the old" and "forward the new".</b> While Tracker 1 is resending operations 5 and 6, one of its clients may create operation 7. Without care, 7 could be dropped: too new for the resend list, too early for the live link. The code holds one lock (<code>peer_mtx</code>) from the moment it reads the log until the link is marked usable. Every operation is then either in the resend list or forwarded afterwards. In the worst case it is sent twice, and the receiver ignores the copy because it has seen that number.</p></div>
+
+<h2>Restart</h2>
+<p>A tracker that starts reads <code>oplog.txt</code> from the top and applies every line. That rebuilds all its data. Anything newer arrives through the catch-up above. Both trackers append to the same file when they are started from the same folder; every line is written with one <code>write</code> call on a file opened in append mode, so lines from the two programs never mix.</p>
+
+<h2>When a tracker disappears: the client's side</h2>
+{{fig:failover|Failover. The client keeps the list of trackers and, in memory only, the password it logged in with.}}
+<p>The other tracker already knows the user, because the account was synchronised when it was created. A new login replaces any older session of the same user, which is exactly what this situation needs.</p>
+
+<h2>What this design does not solve</h2>
+<p>If both trackers accept <i>conflicting</i> commands at the same instant (for example, two people create the same user name on different trackers), each applies its own first and the other's second, and they can end up different. Solving that needs one tracker to decide the order for both (a leader, as in the Raft algorithm). With two trackers and human-speed commands this is rare, and it is stated openly as a limitation.</p>
+</section>
+
+<!-- ================================================================ 7 -->
+<section>
+<h1><span class="n">7</span>Threads and locks</h1>
+
+{{fig:threads|The threads inside each program.}}
+
+<h2>Why the two programs use threads differently</h2>
+<ul>
+  <li><b>Tracker: one thread per connected client.</b> There are few clients (the assignment tests with three), each connection lives long and is mostly idle. One thread per connection is the simplest correct design.</li>
+  <li><b>Client: fixed thread pools.</b> A 1 GB download is 2,048 piece requests, and any number of peers may connect to the seeder. Creating a thread for each would be unbounded. A pool of 8 workers puts a hard limit on threads and open sockets, however many downloads are started or peers connect.</li>
+</ul>
+
+<h2>The thread pool in a few lines</h2>
+<pre>submit(task):   lock;  put task in the queue;  unlock;  wake one worker
+worker:         loop:  lock;  sleep until there is a task (or we are stopping);
+                       take one task;  unlock;  run the task     ← the task runs WITHOUT the lock
+destructor:     set "stopping";  wake everybody;  wait for every worker to finish</pre>
+
+<h2>Every lock and what it protects</h2>
+<table>
+<tr><th style="width:19%">Mutex</th><th style="width:15%">Where</th><th>Protects</th></tr>
+<tr><td><code>state_lock</code></td><td>tracker</td><td>all tracker data and writes to the log. One big lock: every command is applied as one indivisible step.</td></tr>
+<tr><td><code>peer_mtx</code></td><td>tracker</td><td>the connection to the other tracker</td></tr>
+<tr><td><code>threads_mtx</code></td><td>tracker</td><td>the count of live threads and the set of open sockets (needed for a clean <code>quit</code>)</td></tr>
+<tr><td><code>g_tracker_mtx</code></td><td>client</td><td>the one connection to the tracker, used by the shell, by download threads and by seeder threads</td></tr>
+<tr><td><code>job-&gt;mtx</code></td><td>client</td><td>the state of one download: queue of pieces, which peers have what, counters</td></tr>
+<tr><td><code>share_mtx</code>, <code>access_mtx</code></td><td>client</td><td>the table of shared files; the seeder's short memory of the tracker's answers</td></tr>
+</table>
+
+<h3>Why one big lock in the tracker is the right choice here</h3>
+<p>Commands are tiny (a few map operations) and rare (typed by people). One lock makes every command atomic and makes races impossible to write by accident. Finer locks would add risk for no measurable gain. The one slow thing a tracker does, hashing a password, is deliberately done <i>before</i> the lock is taken (section 8).</p>
+
+<h3>No deadlocks</h3>
+<p>A deadlock needs two threads that take the same two locks in opposite orders. Only one place in the code holds two locks at once (<code>peer_mtx</code>, then <code>state_lock</code>, during catch-up) and nowhere are they taken the other way round. Slow work (network transfers, file hashing) is never done while holding a lock, with one deliberate exception: the seeder reads a piece from a running download under that download's lock, so the file cannot be closed underneath it.</p>
+
+<h2>Clean shutdown</h2>
+<p><code>quit</code> in the tracker sets a flag, shuts down every open socket (which wakes every thread blocked on one) and waits for the thread count to reach zero. <code>quit</code> in the client cancels downloads, stops the seeder and joins all threads. Threads waiting in <code>accept</code> use <code>poll</code> with a 200 ms limit so they notice the flag. The leak checker reports 0 leaks for both programs.</p>
+</section>
+
+<!-- ================================================================ 8 -->
+<section>
+<h1><span class="n">8</span>Security <span style="font-weight:400;font-size:12pt;color:#627d98">(beyond the assignment)</span></h1>
+
+<div class="note warn"><p>The assignment does not ask for this section's work. It was added afterwards as an extension. Two honest consequences: the programs now need certificate files (made by <code>make cert</code>) to start, and the custom protocols of section 3 now travel inside TLS, which comes from the OpenSSL library. Sections 1–7 are unchanged by it apart from three small protocol additions named below.</p></div>
+
+<h2>The threat: a man in the middle</h2>
+{{fig:mitm|Someone on the network path between two programs. Before this work all three questions had the answer "yes".}}
+<p>Without protection, anyone on the same network could read passwords, answer in place of a tracker, or change a tracker's reply. The last one is the worst: the piece hashes come from the tracker, so whoever can change that reply can make the SHA-1 checks of section 4 approve a wrong file.</p>
+
+<h2>Encryption alone is not enough</h2>
+<p>If a client encrypts its connection without knowing <i>who</i> is at the other end, an attacker can sit in the middle, encrypt separately with each side, and read everything. So each connection must also prove identity. TLS does both, and every connection in the system now uses it. There is no unencrypted mode to fall back to.</p>
+
+<table>
+<tr><th style="width:21%">Link</th><th>How each side knows who the other is</th></tr>
+<tr><td>Client → tracker</td><td>A tracker must show a certificate signed by the project's own small certificate authority and prove it holds the matching private key. Clients are given the authority's certificate (<code>ca_cert.pem</code>) together with <code>tracker_info.txt</code>.</td></tr>
+<tr><td>Tracker → tracker</td><td>Both sides show such a certificate. The synchronisation link, whose operations skip all permission checks, is accepted only from a connection that did.</td></tr>
+<tr><td>Client → client</td><td>Peers have no certificates. Each client makes a fresh key pair when it starts and registers its <i>fingerprint</i> with the tracker. The tracker hands the fingerprint out together with the address. A downloader talks only to a peer that proves it holds that key.</td></tr>
+</table>
+
+{{fig:trust|Everything is derived from one file that the client receives by a safe route.}}
+
+<h2>Passwords are never stored</h2>
+<p>TLS protects a password while it travels. It does nothing about where it rests. Originally the log file contained every password in plain text. Now the tracker turns a password into a <b>salted, slow hash</b> the moment it arrives (PBKDF2-HMAC-SHA256, 600,000 rounds, a random salt per user) and keeps only that.</p>
+{{fig:password|A login. The password itself goes no further than the function that hashes it.}}
+<ul>
+  <li><b>Salt</b> means two users with the same password get different hashes, and a table of pre-computed hashes is useless.</li>
+  <li><b>Slow</b> means someone who steals the log must spend 600,000 hash rounds for every guess.</li>
+  <li>The hashing takes about 0.15 seconds, so it is done <b>before</b> the tracker's lock is taken. Inside the lock it would stall every other client.</li>
+  <li>A stolen hash cannot be used to log in: the tracker hashes whatever it is sent.</li>
+</ul>
+
+<h2>The seeder checks who is asking</h2>
+<p>At first a seeder gave pieces to anyone who knew a file name. Now it answers only members of the group the file is shared in.</p>
+{{fig:access|One piece request. The seeder asks the tracker once per downloader, not once per piece.}}
+<p>If the tracker cannot be asked, the answer is "no". Every refusal looks the same from outside, so a stranger cannot even find out what a seeder has.</p>
+
+<h3>Protocol additions made by this section</h3>
+<p><code>REGISTER_ADDR</code> and the peer list carry a key fingerprint; <code>GET_BITFIELD</code> and <code>GET_PIECE</code> end with the group name; a new request <code>CHECK_ACCESS &lt;group&gt; &lt;fingerprint&gt;</code> is answered with <code>Allowed</code> or <code>Denied</code>.</p>
+</section>
+
+<!-- ================================================================ 9 -->
+<section>
+<h1><span class="n">9</span>Challenges and how they were solved</h1>
+
+<p class="lead">The first version worked for the simple case and had real problems. Reviewing it critically and fixing it taught more than writing it.</p>
+
+{{fig:timeline|How the project grew.}}
+
+<table class="long">
+<tr><th style="width:3%">#</th><th style="width:25%">Problem</th><th style="width:34%">What caused it</th><th>Solution</th></tr>
+<tr><td>1</td><td>Every answer from the tracker was the answer to the <i>previous</i> command</td><td>An upload was sent twice and only one line of a multi-line reply was read. The unread lines were then taken as the next reply.</td><td>One function (<code>exchange</code>) is the only place that sends a request and reads a reply, and it always reads to <code>END</code>.</td></tr>
+<tr><td>2</td><td>The seeder would send any file on the disk</td><td>It opened whatever path the request named.</td><td>A share table: only files this client uploaded or downloaded are served.</td></tr>
+<tr><td>3</td><td>A silent peer froze a download forever</td><td>A timeout was set, but when it fired the code simply tried again.</td><td>A timeout is a failure. The piece goes to another peer; repeated failures drop the peer.</td></tr>
+<tr><td>4</td><td>Downloads used one peer and one piece at a time</td><td>The simplest loop was written first.</td><td>Thread pool, bitfields, rarest-first, four pieces in flight, least-busy peer.</td></tr>
+<tr><td>5</td><td>Any client could act as any user</td><td>The tracker trusted the name written in the command.</td><td>The login is tied to the connection; every command is checked against it.</td></tr>
+<tr><td>6</td><td>After a restart, the other tracker stopped sending updates</td><td>The link was connected once at start-up and never again.</td><td>A thread that reconnects every second, with catch-up by sequence number.</td></tr>
+<tr><td>7</td><td>A user was logged out for no reason after a tracker restart</td><td>Two correct features combined badly: a tracker that quits logged its clients out, and catch-up later delivered that logout <i>after</i> the user had logged in on the other tracker.</td><td>A tracker that is shutting down does not log its clients out. Found by reading the log of a test, not by a failing test.</td></tr>
+<tr><td>8</td><td>Adding TLS broke an assumption about threads</td><td>One thread sat reading the sync link to notice when it broke, while others wrote on it. Fine for a socket; not allowed for one TLS connection.</td><td>The reader watches the raw socket without touching the TLS state (<code>MSG_PEEK</code>).</td></tr>
+<tr><td>9</td><td>Password hashing would have frozen the tracker</td><td>The natural place for it was inside the function that runs under the big lock.</td><td>Hash first, take the lock afterwards.</td></tr>
+</table>
+
+<div class="note"><p><b>The lesson that came up again and again:</b> a check is only as good as the thing it compares against. The SHA-1 check looked like security, but the hashes arrived over an unprotected connection. Asking "where does this value come from?" found more problems than any amount of testing the normal case.</p></div>
+</section>
+
+<!-- ================================================================ 10 -->
+<section>
+<h1><span class="n">10</span>Testing and results</h1>
+
+<p>All tests below were run on one machine (Apple M1, macOS) with two trackers and up to three clients, each client driven by typed or piped commands. Downloaded files were compared with the originals byte by byte using <code>cmp</code>.</p>
+
+<h2>What the assignment asks to be tested</h2>
+<table class="long">
+<tr><th style="width:36%">Test</th><th>What was observed</th><th style="width:9%">Result</th></tr>
+<tr><td>Full flow: users, group, join, accept, upload, list, download</td><td>Every command gave the expected reply; <code>[C] [movies] movie.bin</code> shown</td><td class="ok">✓ pass</td></tr>
+<tr><td>File sizes: 12 bytes, 3 MB, 200 MB, 1 GB</td><td>All copies identical to the original</td><td class="ok">✓ pass</td></tr>
+<tr><td>One file from two peers at once</td><td>Pieces arrived from both addresses in the same download</td><td class="ok">✓ pass</td></tr>
+<tr><td>Three downloads at once in one client</td><td>All three completed; progress visible while running; prompt stayed usable</td><td class="ok">✓ pass</td></tr>
+<tr><td>A peer's copy is replaced with wrong data</td><td>"Hash mismatch" for the pieces from that peer; download completed from the other peer; result identical</td><td class="ok">✓ pass</td></tr>
+<tr><td>Clients on different trackers</td><td>A group created on one tracker was listed and joined through the other</td><td class="ok">✓ pass</td></tr>
+<tr><td>A tracker is stopped during a session</td><td>The client switched to the other tracker on its next command and kept its login</td><td class="ok">✓ pass</td></tr>
+<tr><td>A tracker starts late, in its own folder</td><td>The running tracker printed "resent 12 operations"; the late one then listed everything</td><td class="ok">✓ pass</td></tr>
+<tr><td>Both trackers restarted</td><td>State rebuilt from the log; users could log in again</td><td class="ok">✓ pass</td></tr>
+<tr><td><code>logout</code> stops sharing</td><td>The logged-out client was no longer offered as a peer</td><td class="ok">✓ pass</td></tr>
+<tr><td>Memory leaks (macOS <code>leaks --atExit</code>)</td><td>0 leaks for the client and for the tracker</td><td class="ok">✓ pass</td></tr>
+</table>
+
+<h2>Measurements: a 1 GB file</h2>
+<div class="two">
+<table>
+<tr><th>What</th><th>Measured</th></tr>
+<tr><td><code>upload_file</code> (hash 1 GB, register 2,048 hashes)</td><td><b>2.1 s</b></td></tr>
+<tr><td><code>download_file</code>, one seeder, including the final whole-file check</td><td><b>7.8 s</b> (about 138 MB/s)</td></tr>
+<tr><td>Peak memory of the downloading client</td><td><b>about 12 MB</b></td></tr>
+<tr><td>Peak memory of the seeding client</td><td>about 11 MB</td></tr>
+<tr><td>Peak memory of a tracker</td><td>about 7 MB</td></tr>
+<tr><td>Size of the upload message</td><td>about 84 KB</td></tr>
+</table>
+<div>
+<p><b>Reading these numbers.</b> Both clients ran on the same machine, so this measures the program and the disk, not a real network. TLS was on for every connection.</p>
+<p>The important number is the memory: 12 MB for a file of 1,024 MB. It confirms that the file is never loaded as a whole, on either side.</p>
+<p>On one machine, downloading from two peers is not faster than from one, because both read the same disk. On a real network the gain depends on the peers' upload speeds.</p>
+</div>
+</div>
+
+<h2>Security tests (attacking the system)</h2>
+<table class="long">
+<tr><th style="width:36%">Attack</th><th>What happened</th><th style="width:9%">Result</th></tr>
+<tr><td>Send a command to the tracker without TLS</td><td>Connection refused with a TLS alert; nothing was created</td><td class="ok">✓ blocked</td></tr>
+<tr><td>A relay between client and tracker records everything</td><td>The client worked normally through it; the recording contained neither the password nor the word <code>LOGIN</code></td><td class="ok">✓ blocked</td></tr>
+<tr><td>A fake tracker with a self-made certificate</td><td>The client refused the connection and sent it nothing</td><td class="ok">✓ blocked</td></tr>
+<tr><td>Pretend to be the other tracker and inject an operation</td><td>Rejected, with and without a self-made certificate</td><td class="ok">✓ blocked</td></tr>
+<tr><td>A fake peer answers on a seeder's address</td><td>Dropped before any request was sent to it</td><td class="ok">✓ blocked</td></tr>
+<tr><td>A stranger asks a seeder for a shared file</td><td>Refused: with no key, with a key of its own, and with the wrong group</td><td class="ok">✓ blocked</td></tr>
+<tr><td>Search the log and the tracker's screen for passwords</td><td>None found; the log holds a hash for account creation and no secret for logins</td><td class="ok">✓ pass</td></tr>
+<tr><td>Log in using a hash copied from the log</td><td>Login failed</td><td class="ok">✓ blocked</td></tr>
+<tr><td>Replace a tracker's key while clients keep their files</td><td>Clients reconnected with no change on their side</td><td class="ok">✓ pass</td></tr>
+</table>
+
+<div class="note"><p><b>Not tested in this round:</b> a peer that is frozen rather than removed, a network cut between two <i>running</i> trackers, and clients on separate machines. The code paths for the first two exist (timeouts, reconnect with catch-up) and were exercised by the related tests above, but those exact scenarios were not re-run for this report.</p></div>
+</section>
+
+<!-- ================================================================ 11 -->
+<section>
+<h1><span class="n">11</span>Limitations and future work</h1>
+
+<p>Knowing where a design stops is part of understanding it.</p>
+
+<table class="long">
+<tr><th style="width:30%">Limitation</th><th style="width:34%">Why it is like this</th><th>How it could be improved</th></tr>
+<tr><td>A new connection (and TLS handshake) for every piece</td><td>One request, one reply, close: the simplest protocol that cannot get out of step</td><td>Keep one connection per peer and send many requests on it</td></tr>
+<tr><td>An interrupted download starts again from zero</td><td>The list of pieces already held lives only in memory</td><td>Save the bitfield next to the <code>.part</code> file; on restart re-check those pieces and continue</td></tr>
+<tr><td>Conflicting commands on both trackers at the same instant can leave them different</td><td>Each tracker orders its own operations; nobody orders across both</td><td>One tracker decides the order for both (a leader, as in Raft)</td></tr>
+<tr><td>The log grows forever</td><td>Restart replays the whole history</td><td>Write a snapshot of the state from time to time and drop the log before it</td></tr>
+<tr><td>A session whose tracker crashed stays "logged in" until that user logs in again</td><td>A crashed tracker cannot say goodbye for its clients</td><td>A time limit on sessions, renewed by a heartbeat</td></tr>
+<tr><td>Bitfields are refreshed only when a download is stuck</td><td>Enough for this scale</td><td>Peers announce each new piece, as BitTorrent does</td></tr>
+<tr><td>A file is identified by its name inside a group</td><td>Simple for users</td><td>Identify files by their hash</td></tr>
+<tr><td>Login attempts are not limited</td><td>Not required; each attempt already costs the tracker 0.15 s</td><td>Slow down or lock an account after repeated failures</td></tr>
+<tr><td>A stolen tracker key works until its certificate expires</td><td>There is no list of cancelled certificates</td><td>Short-lived certificates or a revocation list</td></tr>
+<tr><td>SHA-1 is no longer considered secure against deliberate collisions</td><td>The assignment specifies SHA-1</td><td>SHA-256: a change in two small functions</td></tr>
+</table>
+
+<h2>If the system had to serve thousands of clients</h2>
+<ul>
+  <li><b>Tracker:</b> replace one-thread-per-client with an event loop, split the single lock by group, and add snapshots so that restart time does not grow with history.</li>
+  <li><b>Clients:</b> reuse connections, limit the number of peers per download, and have peers announce new pieces.</li>
+</ul>
+</section>
+
+<!-- ================================================================ 12 -->
+<section>
+<h1><span class="n">12</span>References</h1>
+
+<ul>
+  <li>B. Cohen, <i>Incentives Build Robustness in BitTorrent</i>, 2003 — pieces, piece hashes and rarest-first selection.</li>
+  <li>W. R. Stevens, B. Fenner, A. Rudoff, <i>UNIX Network Programming, Volume 1</i> — sockets, partial reads and writes, non-blocking connect, <code>poll</code>.</li>
+  <li>Linux and macOS manual pages: <code>socket</code>, <code>send</code>, <code>recv</code>, <code>poll</code>, <code>pwrite</code>, <code>rename</code>, <code>setsockopt</code>, <code>signal</code>.</li>
+  <li>D. Ongaro, J. Ousterhout, <i>In Search of an Understandable Consensus Algorithm (Raft)</i>, 2014 — background for replicating a log of commands and for what leader-based ordering would add.</li>
+  <li>OpenSSL documentation: <code>EVP</code> digest interface (SHA-1), <code>SSL_CTX</code> and <code>SSL</code> interfaces, <code>PKCS5_PBKDF2_HMAC</code>.</li>
+  <li>RFC 8446, <i>The Transport Layer Security (TLS) Protocol Version 1.3</i>.</li>
+  <li>OWASP, <i>Password Storage Cheat Sheet</i> — choice of PBKDF2 and its iteration count.</li>
+</ul>
+</section>

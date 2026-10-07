@@ -1,0 +1,35 @@
+# learning notes (kept locally, not part of the project)
+study/
+
+# build outputs
+tracker/tracker
+client/client
+*.o
+
+# keys and certificates: everyone makes their own with `make cert`
+*.pem
+*.srl
+*.csr
+
+# files the programs write while running
+oplog.txt
+.shared_*
+*.part
+
+# test files and folders made while following the README
+client/*.txt
+client/*.bin
+via2/
+viafake/
+viarelay/
+evil/
+
+# older version of the report, generated report page
+Technical report (old).pdf
+report/technical_report.html
+__pycache__/
+
+# editor, OS and tool folders
+.DS_Store
+.vscode/
+.kilo/
