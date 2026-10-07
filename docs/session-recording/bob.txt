@@ -1,0 +1,35 @@
+peer-to-peer/client $ ./client 127.0.0.1:5002 ../via2/tracker_info.txt
+[SEEDER] Listening on port 5002
+Connected to tracker 127.0.0.1:4001
+Type help for the list of commands
+> create_user bob p2
+User created
+> login bob p2
+Login successful
+bob> list_groups
+g1
+bob> join_group g1
+Request sent
+bob> list_files g1
+testfile.txt 12 alice
+movie.bin 3000000 alice
+bob> download_file g1 testfile.txt DOWN_testfile.txt
+Downloading testfile.txt (12 bytes, 1 pieces) from 1 peer(s) -> DOWN_testfile.txt
+Use show_downloads to see the progress
+bob> [DOWNLOADER] Completed testfile.txt -> DOWN_testfile.txt
+download_file g1 movie.bin bob_movie.bin
+Downloading movie.bin (3000000 bytes, 6 pieces) from 1 peer(s) -> bob_movie.bin
+Use show_downloads to see the progress
+bob> [DOWNLOADER] Completed movie.bin -> bob_movie.bin
+show_downloads
+[C] [g1] testfile.txt
+[C] [g1] movie.bin
+bob> list_groups
+Lost connection to tracker, switching...
+Connected to tracker 127.0.0.1:4000
+g1
+bob> list_files g1
+testfile.txt 12 alice
+movie.bin 3000000 alice
+bob> quit
+peer-to-peer/client $ 

@@ -1,0 +1,52 @@
+peer-to-peer/client $ echo "hello world" > testfile.txt
+peer-to-peer/client $ head -c 3000000 /dev/urandom > movie.bin
+peer-to-peer/client $ ./client 127.0.0.1:5001 ../tracker_info.txt
+[SEEDER] Listening on port 5001
+Connected to tracker 127.0.0.1:4000
+Type help for the list of commands
+> create_user alice p1
+User created
+> login alice p1
+Login successful
+alice> create_group g1
+Group created
+alice> upload_file g1 testfile.txt
+File uploaded
+alice> upload_file g1 movie.bin
+File uploaded
+alice> list_files g1
+testfile.txt 12 alice
+movie.bin 3000000 alice
+alice> list_requests g1
+bob
+carol
+alice> accept_request g1 bob
+Request accepted
+alice> accept_request g1 carol
+Request accepted
+alice> verbose on
+alice> [SEEDER] Served: GET_BITFIELD testfile.txt g1
+[SEEDER] Served: GET_PIECE testfile.txt 0 g1
+[SEEDER] Served: GET_BITFIELD movie.bin g1
+[SEEDER] Served: GET_PIECE movie.bin 1 g1
+[SEEDER] Served: GET_PIECE movie.bin 5 g1
+[SEEDER] Served: GET_PIECE movie.bin 0 g1
+[SEEDER] Served: GET_PIECE movie.bin 4 g1
+[SEEDER] Served: GET_PIECE movie.bin 2 g1
+[SEEDER] Served: GET_PIECE movie.bin 3 g1
+[SEEDER] Served: GET_BITFIELD movie.bin g1
+[SEEDER] Served: GET_PIECE movie.bin 5 g1
+[SEEDER] Served: GET_PIECE movie.bin 0 g1
+[SEEDER] Served: GET_PIECE movie.bin 4 g1
+[SEEDER] Served: GET_PIECE movie.bin 1 g1
+[SEEDER] Served: GET_BITFIELD movie.bin g1
+[SEEDER] Served: GET_PIECE movie.bin 5 g1
+[SEEDER] Served: GET_PIECE movie.bin 2 g1
+[SEEDER] Served: GET_PIECE movie.bin 3 g1
+[SEEDER] Served: GET_PIECE movie.bin 1 g1
+[SEEDER] Served: GET_PIECE movie.bin 4 g1
+[SEEDER] Served: GET_PIECE movie.bin 0 g1
+[SEEDER] Refused request: GET_PIECE movie.bin 0 g1
+[SEEDER] Refused request: GET_PIECE movie.bin 0 g1
+quit
+peer-to-peer/client $ 

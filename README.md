@@ -29,7 +29,7 @@ A full write-up with diagrams is in [Technical report.pdf](Technical%20report.pd
 - [Commands](#commands)
 - [Architecture](#architecture) · [Key algorithms](#key-algorithms) · [Data structures](#data-structures) · [Network protocols](#network-protocols) · [Security](#security) · [Assumptions](#assumptions) · [Limitations](#limitations)
 
-> **About the screenshots.** They show the real output of one complete run of the commands below (two trackers, three clients, on macOS), drawn as terminal windows. Lines longer than the window are cut with `…`. Key fingerprints and password hashes are random, so yours will differ.
+> **About the screenshots.** They are not photos of a screen. One complete run of the commands below (two trackers, three clients, macOS, started from a fresh clone of this repository) was recorded from real terminals, and the images are that recorded text drawn as terminal windows. Window titles and colours were added; lines longer than the window are cut with `…`; where an image starts in the middle of a window, the prompt that stood before the first command is shown again. The complete, uncut recording of all six terminals is in [docs/session-recording/](docs/session-recording/). Key fingerprints and password hashes are random, so yours will differ.
 
 ---
 

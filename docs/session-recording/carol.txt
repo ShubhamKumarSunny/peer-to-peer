@@ -1,0 +1,51 @@
+peer-to-peer/client $ ./client 127.0.0.1:5003 ../via2/tracker_info.txt
+[SEEDER] Listening on port 5003
+Connected to tracker 127.0.0.1:4001
+Type help for the list of commands
+> create_user carol p3
+User created
+> login carol p3
+Login successful
+carol> join_group g1
+Request sent
+carol> verbose on
+carol> download_file g1 movie.bin carol_movie.bin
+Downloading movie.bin (3000000 bytes, 6 pieces) from 2 peer(s) -> carol_movie.bin
+Use show_downloads to see the progress
+carol> [DOWNLOADER] Got piece 5 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Got piece 0 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Got piece 2 of 'movie.bin' from 127.0.0.1:5002
+[DOWNLOADER] Got piece 3 of 'movie.bin' from 127.0.0.1:5002
+[DOWNLOADER] Got piece 4 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Got piece 1 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Completed movie.bin -> carol_movie.bin
+show_downloads
+[C] [g1] movie.bin
+carol> stop_share g1 movie.bin
+Stopped sharing
+carol> download_file g1 movie.bin carol_again.bin
+Downloading movie.bin (3000000 bytes, 6 pieces) from 2 peer(s) -> carol_again.bin
+Use show_downloads to see the progress
+carol> [DOWNLOADER] Got piece 5 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Got piece 2 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Hash mismatch for piece 1 of 'movie.bin' from 127.0.0.1:5002
+[DOWNLOADER] Hash mismatch for piece 4 of 'movie.bin' from 127.0.0.1:5002
+[DOWNLOADER] Got piece 3 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Hash mismatch for piece 0 of 'movie.bin' from 127.0.0.1:5002
+[DOWNLOADER] Got piece 1 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Got piece 4 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Got piece 0 of 'movie.bin' from 127.0.0.1:5001
+[DOWNLOADER] Completed movie.bin -> carol_again.bin
+show_downloads
+[C] [g1] movie.bin
+[C] [g1] movie.bin
+carol> leave_group g1
+Lost connection to tracker, switching...
+Connected to tracker 127.0.0.1:4001
+Left group
+carol> list_files g1
+User not in group
+carol> logout
+Logout successful
+> quit
+peer-to-peer/client $ 

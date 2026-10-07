@@ -1,0 +1,114 @@
+peer-to-peer $ cd tracker && make clean && make
+rm -f tracker
+g++ -std=c++11 -pthread -Wall -Wextra -I/opt/homebrew/Cellar/openssl@3/3.6.0/include server.cpp commands.cpp tls.cpp password.cpp -L/opt/homebrew/Cellar/openssl@3/3.6.0/lib -lssl -lcrypto -o tracker
+peer-to-peer $ make cert
+...+.......+++++++++++++++++++++++++++++++++++++++*.+++++++++++++++++++++++++++++++++++++++*..............+.+...+......+.....+....+..+.......+...+........+....+..+....++++++
+.................+............+......+..+.+......+.....+....+++++++++++++++++++++++++++++++++++++++*.........+++++++++++++++++++++++++++++++++++++++*...........................+...+.................+....+..+...+......+......+.......+..+...................+..+....+......+.........+.....+...+..........+..+......+....+..............+.......+............+......+.....+.+...+........+...+.+.....+..........+........+...+.........+.........+......+.+.....+.........+.+.................+.+.................+...+....+......+.....+......+......+.......+............+...+..+.+.....+.........+.+.....+.......+.....+.+.....+......................+..+.+......+......+..............+.+.........+...+..+....+.....+.........+.......+...+..+...+.............+...............+..+.+......+......+...+.....+.+........+......+.......+...+.................+.........+...+.+..+.......+......+......+...+..+...+.............+..+.+............+........+....+...........+......+.+.....+....+...+...........+.........+.............+...+.....+......+...+.............+..+.......+......+...+...............+......+.....+...+.+.........+...........+.+...............+.....+.+.....+.......+..+.............+........+...+.....................+....+..+...+.+........+.+.........+..+.....................+..........+..+.......+.....+.+.....+............+.+...........+....+.....+..........+.....+....+....................+.......+...+..+.+.....+...+.......+...+..+.........+...+.......+...+..................+..+...+...+.......+........+.+........+.+....................+....+..+.+.....+..........+..+...............+.+......+...+...+........+.+........+...............+......+.+...+..+......+.......+...+............+..+...+.......+...........+.......+.....+.+..+.......+......+...........+...+...+......................+..+.+..............+....+..+.............+..+....+.........+..+...+.+.....+.........+.+.....+.........+....+...+........+....+..+....+.........+........+.........+...+...+.......+.....+.+......+...............+.....+....++++++
+-----
+......+........+...+.......+...+......+...+..+...+......+......+.............+.....+...+.........+......+.......+.....+.+..+....+++++++++++++++++++++++++++++++++++++++*.+...+..+++++++++++++++++++++++++++++++++++++++*....+............+.....+.+...+.........+...+........+............+..........+...+..+.........+....+..+............+.+...........+.........+...............+.+...........+.......+..+....+..+..........+.....+.........+...+...+...+......................+..+...............+............+.+.....+..................+.......+..+.+......+...+..+..................+......+.+...+...+........+......+.+........+.........+............+.+...+.........+..+.+..+............+....+......+......+.........+.....+...+.......+.....+.+..+.......+......+........+...................+..+.+.........+...+..+.........+.........+......+....+..+.........+.+.....+.........+.......+..+...+....+......+.....+.........+......+....+.........+.....+................+...+...+..+.+.....+............+...+............+.........+....+.........+.....+.+...............+......+......+...+......+.....+....+.....+.+...........+....+...+.....+......+....+........+..........+..+.+.........+..+...+......+............+....+...+...+..+......+.........+.+.....+.+.....+.+.....+..........+............+........+....+.....+....+......+........+.+......+.....+.+........+.+........+.+.....+...............+.+...+......+.........+...+..+...............+.......+...............+......+..+............+.+..+.+.........+...........+.+...+...+.....+...............+....+...........+...+.......+..+.+.....+......+....+.................+.........+.+........+....+...+.....+...+........................+...............+......+....+..+...+.......+........+.............+..+.......+..............+......+....+......+...+..+....+.....+...............+....+...........+.+......+.........++++++
+.+..+..........+..+++++++++++++++++++++++++++++++++++++++*...+..+++++++++++++++++++++++++++++++++++++++*............+..+...+....+...+...+..+...+........................+...+.........+...+............+......+..........+..+.+.........+...........+..........+......+.....+....+......+...........+...+.....................+.............+..+......+....+...+......+..+..........+...+.....+.......+...+..............+.+.....+....+.....+..................+...+.......+..+.......+..............+..........+......+...+...........+............+...+.+...+........+....+...+..+......+.............+..+....+...+..+.............+.....+.+.....+................+.................................+...........+......+.+...+......+........+...+....+......+..+.+.....+....+...+........+......+.+...+......+...+.....+...+...+....+..+.........+......+.+.....+.............+..+.............+.....+.+..............+......+.+........+.+...+...+........+.+.........+.....+....+..+.....................+..........+...+..+.........+.+...+......+........+.+.....+.+......+.....+....+.....+......+.......+..+...+..........+......+............+.....+.......+...+.........+......++++++
+-----
+Certificate request self-signature ok
+subject=CN=p2p-tracker-1
+.........+...................+++++++++++++++++++++++++++++++++++++++*..+++++++++++++++++++++++++++++++++++++++*...........+....+..............+...+...+.......+...+......+...+..++++++
+..........+...+........+....+.....+.+.........+......+..+....+...+........+....+...+..+....+++++++++++++++++++++++++++++++++++++++*.+...........+.........+.+.....+.......+..+++++++++++++++++++++++++++++++++++++++*.+...+................+..+............+.......+........+.......+...+............+...+..+....+............+..+............+.+..+......+......+.+.....+.........+.+...+.........+......+......+...+........+.........+....+......+.....+.+.........+...........+...+......+....+.........++++++
+-----
+Certificate request self-signature ok
+subject=CN=p2p-tracker-2
+Created in ..: ca_cert.pem ca_key.pem tracker1_cert.pem tracker1_key.pem tracker2_cert.pem tracker2_key.pem
+peer-to-peer $ cd ../client && make clean && make
+rm -f client
+g++ -std=c++11 -pthread -Wall -Wextra -I/opt/homebrew/Cellar/openssl@3/3.6.0/include client.cpp peer.cpp fileutils.cpp threadpool.cpp tls.cpp -L/opt/homebrew/Cellar/openssl@3/3.6.0/lib -lssl -lcrypto -o client
+peer-to-peer $ cd ..
+peer-to-peer $ ls
+README.md		ca_cert.pem		client			report			tools			tracker1_cert.pem	tracker2_cert.pem	tracker_info.txt
+Technical report.pdf	ca_key.pem		docs			run.sh			tracker			tracker1_key.pem	tracker2_key.pem
+peer-to-peer $ mkdir -p via2 && (sed -n 2p tracker_info.txt; sed -n 1p tracker_info.txt) > via2/tracker_info.txt && cp ca_cert.pem via2/ && cat via2/tracker_info.txt
+127.0.0.1:4001
+127.0.0.1:4000
+peer-to-peer $ cd client
+peer-to-peer $ cmp testfile.txt DOWN_testfile.txt && cmp movie.bin bob_movie.bin && cmp movie.bin carol_movie.bin && echo "all three copies are identical"
+all three copies are identical
+peer-to-peer $ ls -l movie.bin bob_movie.bin carol_movie.bin
+-rw-r--r--@ 1 shubham  wheel  3000000 Oct  7 23:14 bob_movie.bin
+-rw-r--r--@ 1 shubham  wheel  3000000 Oct  7 23:14 carol_movie.bin
+-rw-r--r--@ 1 shubham  wheel  3000000 Oct  7 23:14 movie.bin
+peer-to-peer $ cd ..
+peer-to-peer $ cut -c1-100 tracker/oplog.txt
+1 1 CREATE_USER alice pbkdf2-sha256$600000$02f7b16e3a07fea9925202bf47c3edb3$ac8ca7bce543b3271538a7c0
+1 2 LOGIN alice
+1 3 REGISTER_ADDR alice 127.0.0.1:5001 d9a245dd0317635d92d879de61e0c3adad76e80f5f780195d307cde8614e3
+1 4 CREATE_GROUP g1 alice
+1 5 UPLOAD_FILE g1 alice testfile.txt 12 22596363b3de40b06f981fb85d82312e8c0ed511 1 22596363b3de40b0
+1 6 UPLOAD_FILE g1 alice movie.bin 3000000 0c9dc2d78bcbb9a8bd88f85ec9784798fb2c7be0 6 cf5b74b8981b0a
+2 1 CREATE_USER bob pbkdf2-sha256$600000$363e4c7eeb32f733c561b04cbedcf0cc$d6886d5a346784363753042be7
+2 2 LOGIN bob
+2 3 REGISTER_ADDR bob 127.0.0.1:5002 9e6e6aeb52b26a75a748cff11b79852112cb956a6ca76458da0767cfe0a069e
+2 4 JOIN_GROUP g1 bob
+2 5 CREATE_USER carol pbkdf2-sha256$600000$b0b391a38af5af03b1d3f4ef47a192bf$681c91116ece2d27ead7f159
+2 6 LOGIN carol
+2 7 REGISTER_ADDR carol 127.0.0.1:5003 e36e7461423cfcf6a2e3e3f999241b40aeabea639281135f10eb365262afe
+2 8 JOIN_GROUP g1 carol
+1 7 ACCEPT_REQUEST g1 bob
+1 8 ACCEPT_REQUEST g1 carol
+2 9 UPLOAD_FILE g1 bob testfile.txt 12 22596363b3de40b06f981fb85d82312e8c0ed511 1 22596363b3de40b06f
+2 10 UPLOAD_FILE g1 bob movie.bin 3000000 0c9dc2d78bcbb9a8bd88f85ec9784798fb2c7be0 6 cf5b74b8981b0ac
+2 11 UPLOAD_FILE g1 carol movie.bin 3000000 0c9dc2d78bcbb9a8bd88f85ec9784798fb2c7be0 6 cf5b74b8981b0
+peer-to-peer $ grep -c 'p1\|p2\|p3' tracker/oplog.txt
+0
+peer-to-peer $ grep 'CREATE_USER\|LOGIN' tracker/oplog.txt | cut -c1-100
+1 1 CREATE_USER alice pbkdf2-sha256$600000$02f7b16e3a07fea9925202bf47c3edb3$ac8ca7bce543b3271538a7c0
+1 2 LOGIN alice
+2 1 CREATE_USER bob pbkdf2-sha256$600000$363e4c7eeb32f733c561b04cbedcf0cc$d6886d5a346784363753042be7
+2 2 LOGIN bob
+2 5 CREATE_USER carol pbkdf2-sha256$600000$b0b391a38af5af03b1d3f4ef47a192bf$681c91116ece2d27ead7f159
+2 6 LOGIN carol
+peer-to-peer $ head -c 3000000 /dev/urandom > client/bob_movie.bin     # bob's copy is now wrong
+peer-to-peer $ cmp client/movie.bin client/carol_again.bin && echo identical
+identical
+peer-to-peer $ printf 'CREATE_USER eve pw\n' | nc 127.0.0.1 4000 | xxd
+00000000: 1503 0300 0202 16                        .......
+peer-to-peer $ printf 'GET_PIECE movie.bin 0 g1\n' | openssl s_client -quiet -connect 127.0.0.1:5001 2>/dev/null | xxd
+00000000: ffff ffff                                ....
+peer-to-peer $ mkdir -p evil && openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=p2p-tracker-1" -keyout evil/k.pem -out evil/c.pem 2>/dev/null
+peer-to-peer $ printf 'GET_PIECE movie.bin 0 g1\n' | openssl s_client -quiet -cert evil/c.pem -key evil/k.pem -connect 127.0.0.1:5001 2>/dev/null | xxd
+00000000: ffff ffff                                ....
+peer-to-peer $ printf 'TRACKER_HELLO\nOP 1 CREATE_USER hacker pw\n' | openssl s_client -quiet -connect 127.0.0.1:4000 2>/dev/null
+peer-to-peer $ printf 'TRACKER_HELLO\nOP 1 CREATE_USER hacker pw\n' | openssl s_client -quiet -cert evil/c.pem -key evil/k.pem -connect 127.0.0.1:4000 2>&1 | grep -o 'alert unknown ca'
+alert unknown ca
+peer-to-peer $ grep -c hacker tracker/oplog.txt
+0
+peer-to-peer $ mkdir -p viafake && echo "127.0.0.1:4400" > viafake/tracker_info.txt && cp ca_cert.pem viafake/
+peer-to-peer $ openssl s_server -quiet -accept 4400 -cert evil/c.pem -key evil/k.pem > viafake/received.txt 2>&1 &
+[1] 6259
+peer-to-peer $ cd client && ./client 127.0.0.1:5004 ../viafake/tracker_info.txt; cd ..
+[SEEDER] Listening on port 5004
+TLS handshake with 127.0.0.1:4400 failed (it did not prove to be a tracker), skipping it
+No tracker reachable
+peer-to-peer $ kill %1; wc -c < viafake/received.txt
+     140
+[1]+  Terminated: 15          openssl s_server -quiet -accept 4400 -cert evil/c.pem -key evil/k.pem > viafake/received.txt 2>&1
+peer-to-peer $ mkdir -p viarelay && echo "127.0.0.1:4300" > viarelay/tracker_info.txt && cp ca_cert.pem viarelay/
+peer-to-peer $ python3 tools/mitm_relay.py 4300 4000 viarelay/wire.bin &
+[1] 6264
+peer-to-peer $ relay: listening on 4300 -> forwarding to 4000
+cd client && ./client 127.0.0.1:5004 ../viarelay/tracker_info.txt
+[SEEDER] Listening on port 5004
+Connected to tracker 127.0.0.1:4300
+Type help for the list of commands
+> create_user dave SuperSecret99
+User created
+> login dave SuperSecret99
+Login successful
+dave> quit
+peer-to-peer $ cd .. && kill %1
+peer-to-peer $ wc -c < viarelay/wire.bin
+    5331
+[1]+  Terminated: 15          python3 tools/mitm_relay.py 4300 4000 viarelay/wire.bin
+peer-to-peer $ grep -a -c 'SuperSecret99' viarelay/wire.bin; grep -a -c 'LOGIN' viarelay/wire.bin
+0
+0
+peer-to-peer $ cd client && (printf 'login alice p1\nlist_groups\n'; sleep 2; echo quit) | leaks --atExit -- ./client 127.0.0.1:5001 ../tracker_info.txt 2>&1 | grep -a 'Login\|leaks for'; cd ..
+> Login successful
+Process 6328: 0 leaks for 0 total leaked bytes.
+peer-to-peer $ 

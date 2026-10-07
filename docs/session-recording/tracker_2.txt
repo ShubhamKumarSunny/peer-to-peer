@@ -1,0 +1,61 @@
+peer-to-peer/tracker $ ./tracker ../tracker_info.txt 2
+Tracker 2 listening on 4001 (type quit to stop)
+Connected to peer tracker at 127.0.0.1:4000 (resent 0 operations)
+Peer tracker connected (incoming)
+[SYNC] OP 1 CREATE_USER alice pbkdf2-sha256$600000$02f7b16e3a07fea9925202bf47c3edb3$ac8ca7bce543b3271538a7c0f058c61998faca5d8dfad6a817c2fa54923298b8 -> User created
+[SYNC] OP 2 LOGIN alice -> Login successful
+[SYNC] OP 3 REGISTER_ADDR alice 127.0.0.1:5001 d9a245dd0317635d92d879de61e0c3adad76e80f5f780195d307cde8614e37b2 -> Addr registered
+[SYNC] OP 4 CREATE_GROUP g1 alice -> Group created
+[SYNC] OP 5 UPLOAD_FILE g1 alice testfile.txt 12 22596363b3de40b06f981fb85d82312e8c0ed511 1 22596363b3de40b06f981fb85d82312e8c0ed511 -> File uploaded
+[SYNC] OP 6 UPLOAD_FILE g1 alice movie.bin 3000000 0c9dc2d78bcbb9a8bd88f85ec9784798fb2c7be0 6 cf5b74b8981b0ac198f9bb61e2eae8ce845a7099 ed96a3314873fa2313f84e76b8ad0b95b657d135 7ba72e8218eb565234ae85c96e3d281ad1b6a6ab dc296e308f583baf26a36782f3468c945dec8844 c5db1ac05557a0eeab2150d4895d96e5aa6d1548 504dc291f551807ab52083dc4740f7a81d480dae -> File uploaded
+[SERVER] CREATE_USER bob ****
+[SERVER] LOGIN bob ****
+[SERVER] REGISTER_ADDR bob 127.0.0.1:5002 9e6e6aeb52b26a75a748cff11b79852112cb956a6ca76458da0767cfe0a069e3
+[SERVER] LIST_GROUPS
+[SERVER] JOIN_GROUP g1 bob
+[SERVER] CREATE_USER carol ****
+[SERVER] LOGIN carol ****
+[SERVER] REGISTER_ADDR carol 127.0.0.1:5003 e36e7461423cfcf6a2e3e3f999241b40aeabea639281135f10eb365262afe9a2
+[SERVER] JOIN_GROUP g1 carol
+[SYNC] OP 7 ACCEPT_REQUEST g1 bob -> Request accepted
+[SYNC] OP 8 ACCEPT_REQUEST g1 carol -> Request accepted
+[SERVER] LIST_FILES g1
+[SERVER] DOWNLOAD_FILE g1 testfile.txt
+[SERVER] UPLOAD_FILE g1 bob testfile.txt 12 22596363b3de40b06f981fb85d82312e8c0ed511 1 22596363b3de40b06f981fb85d82312e8c0ed511
+[SERVER] DOWNLOAD_FILE g1 movie.bin
+[SERVER] UPLOAD_FILE g1 bob movie.bin 3000000 0c9dc2d78bcbb9a8bd88f85ec9784798fb2c7be0 6 cf5b74b8981b0ac198f9bb61e2eae8ce845a7099 ed96a3314873fa2313f84e76b8ad0b95b657d135 7ba72e8218eb565234ae85c96e3d281ad1b6a6ab dc296e308f583baf26a36782f3468c945dec8844 c5db1ac05557a0eeab2150d4895d96e5aa6d1548 504dc291f551807ab52083dc4740f7a81d480dae
+[SERVER] DOWNLOAD_FILE g1 movie.bin
+[SERVER] UPLOAD_FILE g1 carol movie.bin 3000000 0c9dc2d78bcbb9a8bd88f85ec9784798fb2c7be0 6 cf5b74b8981b0ac198f9bb61e2eae8ce845a7099 ed96a3314873fa2313f84e76b8ad0b95b657d135 7ba72e8218eb565234ae85c96e3d281ad1b6a6ab dc296e308f583baf26a36782f3468c945dec8844 c5db1ac05557a0eeab2150d4895d96e5aa6d1548 504dc291f551807ab52083dc4740f7a81d480dae
+[SERVER] CHECK_ACCESS g1 e36e7461423cfcf6a2e3e3f999241b40aeabea639281135f10eb365262afe9a2
+[SERVER] STOP_SHARE g1 movie.bin carol
+[SERVER] DOWNLOAD_FILE g1 movie.bin
+[SERVER] UPLOAD_FILE g1 carol movie.bin 3000000 0c9dc2d78bcbb9a8bd88f85ec9784798fb2c7be0 6 cf5b74b8981b0ac198f9bb61e2eae8ce845a7099 ed96a3314873fa2313f84e76b8ad0b95b657d135 7ba72e8218eb565234ae85c96e3d281ad1b6a6ab dc296e308f583baf26a36782f3468c945dec8844 c5db1ac05557a0eeab2150d4895d96e5aa6d1548 504dc291f551807ab52083dc4740f7a81d480dae
+[SYNC] OP 9 CREATE_USER dave pbkdf2-sha256$600000$d0369d0eb0552083ef55b25797cb354f$9e8a4b1c5e33e04281fdd9f5be75d4e0fd9e1f7a2773164debc60aa608185e1d -> User created
+[SYNC] OP 10 LOGIN dave -> Login successful
+[SYNC] OP 11 REGISTER_ADDR dave 127.0.0.1:5004 2238e1dbfcad55edbd23eadd4c9164d42ad10bf23755515c4e223746a22d0b54 -> Addr registered
+[SYNC] OP 12 LOGOUT dave -> Logout successful
+quit
+Tracker shutting down
+Client disconnected
+Client disconnected
+Peer tracker disconnected
+peer-to-peer/tracker $ ./tracker ../tracker_info.txt 2
+Tracker 2 listening on 4001 (type quit to stop)
+Connected to peer tracker at 127.0.0.1:4000 (resent 0 operations)
+Peer tracker connected (incoming)
+[SERVER] LOGIN carol ****
+[SERVER] REGISTER_ADDR carol 127.0.0.1:5003 e36e7461423cfcf6a2e3e3f999241b40aeabea639281135f10eb365262afe9a2
+[SERVER] LEAVE_GROUP g1 carol
+[SERVER] LIST_FILES g1
+[SERVER] LOGOUT carol
+Client disconnected
+[SYNC] OP 15 LOGOUT alice -> Logout successful
+[SYNC] OP 16 LOGOUT bob -> Logout successful
+[SYNC] OP 17 LOGIN alice -> Login successful
+[SYNC] OP 18 REGISTER_ADDR alice 127.0.0.1:5001 11969f16b85194e38e9801f09dd5e073e4251fd693353d5c1410a5b3ff5bbb39 -> Addr registered
+[SYNC] OP 19 LOGOUT alice -> Logout successful
+Lost connection to peer tracker, reconnecting
+Peer tracker disconnected
+quit
+Tracker shutting down
+peer-to-peer/tracker $ 
