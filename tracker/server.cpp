@@ -25,6 +25,18 @@
 #include <sstream>
 using namespace std;
 
+// The console, the accept thread, the connector and one thread per client
+// all print.  Out() << ... << endl;  holds one lock for the whole statement,
+// so two lines never mix and the stream is never used by two threads at once.
+static mutex out_mtx;
+struct Out {
+    lock_guard<mutex> lock;
+    ostream &os;
+    explicit Out(ostream &o = cout) : lock(out_mtx), os(o) {}
+    template <typename T> Out &operator<<(const T &v) { os << v; return *this; }
+    Out &operator<<(ostream &(*f)(ostream &)) { os << f; return *this; }
+};
+
 // Longest accepted line (an UPLOAD_FILE carries 41 bytes per 512KB piece)
 static const size_t MAX_LINE = 16 * 1024 * 1024;
 
@@ -133,7 +145,7 @@ void send_to_peer(const string &msg) {
         shutdown(peer_fd_out, SHUT_RDWR);
         peer_fd_out = -1;
         peer_ssl_out = nullptr;
-        cerr << "Warning: lost outgoing peer connection while forwarding\n";
+        Out(cerr) << "Warning: lost outgoing peer connection while forwarding\n";
     }
 }
 
@@ -145,18 +157,18 @@ void peer_reader(SSL *ssl, int sock) {
         if (peer_fd_in != -1) shutdown(peer_fd_in, SHUT_RDWR);
         peer_fd_in = sock;
     }
-    cout << "Peer tracker connected (incoming)" << endl;
+    Out() << "Peer tracker connected (incoming)" << endl;
     string line;
     while (read_from_socket(ssl, line)) {
         if (line.empty()) continue;
         string res = apply_peer_op(line);
-        cout << "[SYNC] " << line << " -> " << res << endl;
+        Out() << "[SYNC] " << line << " -> " << res << endl;
     }
     {
         lock_guard<mutex> lock(peer_mtx);
         if (peer_fd_in == sock) peer_fd_in = -1;
     }
-    cerr << "Peer tracker disconnected\n";
+    Out(cerr) << "Peer tracker disconnected\n";
 }
 
 // Keeps the outgoing connection to the peer tracker alive, reconnecting
@@ -195,7 +207,7 @@ void peer_connector(string host, int port) {
             if (ok) {
                 peer_fd_out = s;
                 peer_ssl_out = ssl;
-                cout << "Connected to peer tracker at " << host << ":" << port
+                Out() << "Connected to peer tracker at " << host << ":" << port
                      << " (resent " << missed.size() << " operations)" << endl;
             }
         }
@@ -218,7 +230,7 @@ void peer_connector(string host, int port) {
             tls_close(ssl);
             close_fd(s);
         }
-        if (!stopping) cerr << "Lost connection to peer tracker, reconnecting\n";
+        if (!stopping) Out(cerr) << "Lost connection to peer tracker, reconnecting\n";
     }
 }
 
@@ -246,7 +258,7 @@ void client_handler(int sock, sockaddr_in from) {
     if (!track_fd(sock)) { close(sock); return; }
     SSL *ssl = tls_accept(sock);
     if (!ssl) {
-        cerr << "TLS handshake failed, connection dropped\n";
+        Out(cerr) << "TLS handshake failed, connection dropped\n";
         close_fd(sock);
         return;
     }
@@ -254,7 +266,7 @@ void client_handler(int sock, sockaddr_in from) {
     while (read_from_socket(ssl, line)) {
         if (line == TRACKER_HELLO) {
             if (!tls_peer_is_tracker(ssl) || !is_peer_tracker(from)) {
-                cerr << "Rejected tracker sync link: not the other tracker\n";
+                Out(cerr) << "Rejected tracker sync link: not the other tracker\n";
                 break;
             }
             // Tell the peer which of its operations are already applied here
@@ -263,7 +275,7 @@ void client_handler(int sock, sockaddr_in from) {
             close_fd(sock);
             return;
         }
-        cout << "[SERVER] " << printable_command(line) << endl;
+        Out() << "[SERVER] " << printable_command(line) << endl;
         string res = process_command(line, sock, sync_msg);
         send_to_peer(sync_msg);
         if (!send_response_to_client(ssl, res)) break;
@@ -275,13 +287,13 @@ void client_handler(int sock, sockaddr_in from) {
     if (!stopping) {
         string op = end_session(sock, sync_msg);
         if (!op.empty()) {
-            cout << "[SERVER] " << op << " (client disconnected)" << endl;
+            Out() << "[SERVER] " << op << " (client disconnected)" << endl;
             send_to_peer(sync_msg);
         }
     }
     tls_close(ssl);
     close_fd(sock);
-    cout << "Client disconnected" << endl;
+    Out() << "Client disconnected" << endl;
 }
 
 // Parses "<host>:<port>" (or "<host> <port>")
@@ -317,7 +329,7 @@ void accept_clients(int s) {
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        cout << "Usage: " << argv[0] << " tracker_info.txt <tracker_no>\n";
+        Out() << "Usage: " << argv[0] << " tracker_info.txt <tracker_no>\n";
         return 1;
     }
     // tracker_info.txt lists the two trackers, one <ip>:<port> per line
@@ -331,11 +343,11 @@ int main(int argc, char *argv[]) {
     }
     int tracker_no = atoi(argv[2]);
     if (trackers.size() != 2) {
-        cerr << argv[1] << " must list exactly two trackers, one <ip>:<port> per line\n";
+        Out(cerr) << argv[1] << " must list exactly two trackers, one <ip>:<port> per line\n";
         return 1;
     }
     if (tracker_no != 1 && tracker_no != 2) {
-        cerr << "tracker_no must be 1 or 2\n";
+        Out(cerr) << "tracker_no must be 1 or 2\n";
         return 1;
     }
     int my_port = trackers[tracker_no - 1].second;
@@ -362,7 +374,7 @@ int main(int argc, char *argv[]) {
     serv.sin_port = htons(my_port);
     if (::bind(s, (sockaddr*)&serv, sizeof(serv)) < 0) { perror("bind"); close(s); return 1; }
     if (listen(s, 64) < 0) { perror("listen"); close(s); return 1; }
-    cout << "Tracker " << tracker_no << " listening on " << my_port << " (type quit to stop)" << endl;
+    Out() << "Tracker " << tracker_no << " listening on " << my_port << " (type quit to stop)" << endl;
 
     thread(accept_clients, s).detach();
     thread(peer_connector, peer_host, peer_port).detach();
@@ -372,7 +384,7 @@ int main(int argc, char *argv[]) {
     string cmd;
     while (getline(cin, cmd)) {
         if (cmd == "quit") {
-            cout << "Tracker shutting down" << endl;
+            Out() << "Tracker shutting down" << endl;
             unique_lock<mutex> lock(threads_mtx);
             stopping = true;
             for (int fd : live_fds) shutdown(fd, SHUT_RDWR);
@@ -380,7 +392,7 @@ int main(int argc, char *argv[]) {
             close(s);
             return 0;
         }
-        if (!cmd.empty()) cout << "Unknown command (type quit to stop)" << endl;
+        if (!cmd.empty()) Out() << "Unknown command (type quit to stop)" << endl;
     }
     while (true) pause();
 }

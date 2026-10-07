@@ -17,7 +17,7 @@ endif
 
 TARGET = client
 SRCS = client.cpp peer.cpp fileutils.cpp threadpool.cpp tls.cpp
-HDRS = peer.h fileutils.h threadpool.h tls.h
+HDRS = peer.h fileutils.h threadpool.h tls.h console.h
 
 all: $(TARGET)
 

@@ -321,6 +321,21 @@ Linux: `valgrind --leak-check=full ./client 127.0.0.1:5001 ../tracker_info.txt`
 
 ![leaks](docs/screenshots/15-leaks.png)
 
+### Deeper checks that were also run
+
+These are not in the walkthrough above. Both programs were built with AddressSanitizer + UBSan and again with ThreadSanitizer (`make CXXFLAGS="-std=c++11 -pthread -g -fsanitize=thread"`), and a scripted session of two trackers and four clients was run on each build: 18 checks passed and the sanitizers reported nothing.
+
+| Check | Result |
+|---|---|
+| Duplicate user, wrong password, missing file, non-member, non-owner, repeated join request | each refused with its own message |
+| An empty file (0 bytes, 0 pieces) | uploaded, listed with size 0, downloaded |
+| Two clients download four files each at the same time (12 bytes to 60 MB) | all eight copies identical, no `.part` file left |
+| One of three peers frozen (`kill -STOP`) | the request to it gave up after the timeout; the download finished from the others |
+| `quit` while a download is running | the client exits and removes the `.part` file |
+| A second login of the same user | the older client is told `Session ended on the tracker, please login again` |
+| A tracker killed with `kill -9`, then restarted | clients carried on through the other tracker; the restarted one knew what happened meanwhile |
+| A client that is still downloading as a source | Carol started when Bob had 394 of 763 pieces of a 400 MB file and received 225 pieces from him |
+
 ### Larger files
 
 ```
@@ -558,7 +573,7 @@ A failed or cancelled download deletes its `.part` file and withdraws the client
 ### Seeding
 - The seeder serves a file only if this client uploaded it, downloaded it, or is downloading it. A request for any other name or path is refused.
 - It serves it only to members of the group the file is shared in. The downloader proves a key in the TLS handshake and names the group in its request; the seeder asks the tracker (`CHECK_ACCESS`) whether the holder of that key is a logged-in member of that group. An `Allowed` is reused for 30 seconds, a `Denied` for 2. If the tracker cannot be asked, the request is refused.
-- While a download is running, the pieces already verified are served from the `.part` file, so two clients downloading the same file exchange pieces with each other.
+- While a download is running, the pieces already verified are served from the `.part` file, so a client that is still downloading is already a source for anyone who starts after it. (A download asks the tracker for peers once, when it starts, so it does not pick up peers that join later.)
 - The table of shared files (name, group, path) is kept in `.shared_<user>` in the client's working directory, so seeding resumes when the client is restarted from the same directory.
 
 ### Thread pool

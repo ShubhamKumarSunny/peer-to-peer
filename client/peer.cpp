@@ -2,6 +2,7 @@
 #include "fileutils.h"
 #include "threadpool.h"
 #include "tls.h"
+#include "console.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -35,7 +36,6 @@
 using namespace std;
 
 static int g_listen_port = -1;
-static mutex cout_mtx;
 static const uint32_t ERROR_LEN = 0xFFFFFFFFu;
 static const int IO_TIMEOUT_SEC = 5;
 static const size_t MAX_REQUEST_LINE = 1024;
@@ -177,9 +177,13 @@ bool is_shared(const string &name) {
 
 void set_verbose(bool on) { g_verbose = on; }
 
+mutex &console_mutex() {
+    static mutex m;
+    return m;
+}
+
 static void say(const string &msg) {
-    lock_guard<mutex> lg(cout_mtx);
-    cout << msg << endl;
+    Out() << msg << endl;
 }
 
 // Per-piece chatter, only shown after VERBOSE ON
@@ -397,7 +401,6 @@ void stop_seeder() {
 }
 
 bool start_seeder(int port, function<bool(const string &, const string &)> may_download) {
-    lock_guard<mutex> lock(cout_mtx);
     if (g_listen_port != -1) return g_listen_port == port;
     g_may_download = may_download;
     int s = socket(AF_INET, SOCK_STREAM, 0);
@@ -412,7 +415,7 @@ bool start_seeder(int port, function<bool(const string &, const string &)> may_d
     if (listen(s, 64) < 0) { perror("listen seeder"); close(s); return false; }
     g_listen_port = port;
     g_seeder_thread = thread(seeder_thread, s);
-    cout << "[SEEDER] Listening on port " << port << endl;
+    Out() << "[SEEDER] Listening on port " << port << endl;
     return true;
 }
 

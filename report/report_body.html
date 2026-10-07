@@ -78,7 +78,7 @@
 <tr><td>Corrupted pieces fetched again from another peer</td><td>Per-piece check, per-peer failure counters, retry queue</td><td>5</td></tr>
 <tr><td>One file from several peers; several files at once</td><td>Fixed thread pool shared by all downloads, 4 pieces per file in flight</td><td>5, 7</td></tr>
 <tr><td>Custom TCP protocols that survive partial sends</td><td>Three small protocols; every send and receive loops until complete</td><td>3</td></tr>
-<tr><td>Thread-safe shared data; no leaks; sockets closed</td><td>Six mutexes with a fixed order; clean shutdown; 0 leaks measured</td><td>7, 10</td></tr>
+<tr><td>Thread-safe shared data; no leaks; sockets closed</td><td>Every shared structure behind a mutex; clean under ThreadSanitizer; 0 leaks measured</td><td>7, 10</td></tr>
 <tr><td>The 14 commands, the launch format, <code>[C] [group_id] filename</code></td><td>Implemented exactly as written in the assignment</td><td>2</td></tr>
 </table>
 </section>
@@ -264,7 +264,7 @@ length of piece i =  min(524288, size − i × 524288)     (only the last one ca
 </table>
 
 <h2>Seeding, including while still downloading</h2>
-<p>The seeder gives out only two things: files in its <b>share table</b> (files this client uploaded or finished downloading), and <b>verified pieces of downloads that are still running</b>. The second point is what makes the system truly peer-to-peer: two clients downloading the same file exchange pieces with each other while both are still incomplete. A request for any other name or path is refused.</p>
+<p>The seeder gives out only two things: files in its <b>share table</b> (files this client uploaded or finished downloading), and <b>verified pieces of downloads that are still running</b>. The second point is what makes the system truly peer-to-peer: a client that is still downloading is already a source for anyone who starts after it. In a test, Carol started a 400 MB download when Bob had 394 of its 763 pieces, and she received 225 pieces from him. A request for any other name or path is refused.</p>
 </section>
 
 <!-- ================================================================ 6 -->
@@ -335,6 +335,7 @@ destructor:     set "stopping";  wake everybody;  wait for every worker to finis
 <tr><td><code>g_tracker_mtx</code></td><td>client</td><td>the one connection to the tracker, used by the shell, by download threads and by seeder threads</td></tr>
 <tr><td><code>job-&gt;mtx</code></td><td>client</td><td>the state of one download: queue of pieces, which peers have what, counters</td></tr>
 <tr><td><code>share_mtx</code>, <code>access_mtx</code></td><td>client</td><td>the table of shared files; the seeder's short memory of the tracker's answers</td></tr>
+<tr><td>console lock</td><td>both</td><td>everything printed to the terminal: many threads print, and one statement prints as a whole</td></tr>
 </table>
 
 <h3>Why one big lock in the tracker is the right choice here</h3>
@@ -407,6 +408,7 @@ destructor:     set "stopping";  wake everybody;  wait for every worker to finis
 <tr><td>7</td><td>A user was logged out for no reason after a tracker restart</td><td>Two correct features combined badly: a tracker that quits logged its clients out, and catch-up later delivered that logout <i>after</i> the user had logged in on the other tracker.</td><td>A tracker that is shutting down does not log its clients out. Found by reading the log of a test, not by a failing test.</td></tr>
 <tr><td>8</td><td>Adding TLS broke an assumption about threads</td><td>One thread sat reading the sync link to notice when it broke, while others wrote on it. Fine for a socket; not allowed for one TLS connection.</td><td>The reader watches the raw socket without touching the TLS state (<code>MSG_PEEK</code>).</td></tr>
 <tr><td>9</td><td>Password hashing would have frozen the tracker</td><td>The natural place for it was inside the function that runs under the big lock.</td><td>Hash first, take the lock afterwards.</td></tr>
+<tr><td>10</td><td>Log lines from different threads could mix</td><td>Several threads wrote to the terminal with no lock. Every test passed; ThreadSanitizer found it.</td><td>One console lock in each program, held for a whole printed statement.</td></tr>
 </table>
 
 <div class="note"><p><b>The lesson that came up again and again:</b> a check is only as good as the thing it compares against. The SHA-1 check looked like security, but the hashes arrived over an unprotected connection. Asking "where does this value come from?" found more problems than any amount of testing the normal case.</p></div>
@@ -432,6 +434,14 @@ destructor:     set "stopping";  wake everybody;  wait for every worker to finis
 <tr><td>Both trackers restarted</td><td>State rebuilt from the log; users could log in again</td><td class="ok">✓ pass</td></tr>
 <tr><td><code>logout</code> stops sharing</td><td>The logged-out client was no longer offered as a peer</td><td class="ok">✓ pass</td></tr>
 <tr><td>Memory leaks (macOS <code>leaks --atExit</code>)</td><td>0 leaks for the client and for the tracker</td><td class="ok">✓ pass</td></tr>
+<tr><td>An empty file (0 bytes)</td><td>Uploaded, listed with size 0, downloaded as an empty file</td><td class="ok">✓ pass</td></tr>
+<tr><td>One of three peers frozen (<code>kill -STOP</code>)</td><td>The request to it gave up after the timeout; the download finished from the others</td><td class="ok">✓ pass</td></tr>
+<tr><td><code>quit</code> while a download is running</td><td>The client exited and removed the <code>.part</code> file</td><td class="ok">✓ pass</td></tr>
+<tr><td>A tracker killed with <code>kill -9</code>, then restarted</td><td>Clients carried on through the other tracker; the restarted one knew what happened meanwhile</td><td class="ok">✓ pass</td></tr>
+<tr><td>A client that is still downloading used as a source</td><td>225 of 763 pieces came from a peer that had not finished</td><td class="ok">✓ pass</td></tr>
+<tr><td>Permission checks: non-member, non-owner, duplicate user, wrong password, second login</td><td>Each refused with its own message; the older session was ended</td><td class="ok">✓ pass</td></tr>
+<tr><td>AddressSanitizer + UBSan build, scripted session with 4 clients</td><td>18 checks passed, no report</td><td class="ok">✓ clean</td></tr>
+<tr><td>ThreadSanitizer build, same session</td><td>18 checks passed, no report (after challenge 10 was fixed)</td><td class="ok">✓ clean</td></tr>
 </table>
 
 <h2>Measurements: a 1 GB file</h2>
@@ -466,7 +476,7 @@ destructor:     set "stopping";  wake everybody;  wait for every worker to finis
 <tr><td>Replace a tracker's key while clients keep their files</td><td>Clients reconnected with no change on their side</td><td class="ok">✓ pass</td></tr>
 </table>
 
-<div class="note"><p><b>Not tested in this round:</b> a peer that is frozen rather than removed, a network cut between two <i>running</i> trackers, and clients on separate machines. The code paths for the first two exist (timeouts, reconnect with catch-up) and were exercised by the related tests above, but those exact scenarios were not re-run for this report.</p></div>
+<div class="note"><p><b>Not tested:</b> a network cut between two <i>running</i> trackers (only a stopped or killed tracker was tested), and clients on separate machines. A downloader also does not pick up peers that join after it started; that is a limit of the design, listed in section 11.</p></div>
 </section>
 
 <!-- ================================================================ 11 -->
@@ -482,7 +492,7 @@ destructor:     set "stopping";  wake everybody;  wait for every worker to finis
 <tr><td>Conflicting commands on both trackers at the same instant can leave them different</td><td>Each tracker orders its own operations; nobody orders across both</td><td>One tracker decides the order for both (a leader, as in Raft)</td></tr>
 <tr><td>The log grows forever</td><td>Restart replays the whole history</td><td>Write a snapshot of the state from time to time and drop the log before it</td></tr>
 <tr><td>A session whose tracker crashed stays "logged in" until that user logs in again</td><td>A crashed tracker cannot say goodbye for its clients</td><td>A time limit on sessions, renewed by a heartbeat</td></tr>
-<tr><td>Bitfields are refreshed only when a download is stuck</td><td>Enough for this scale</td><td>Peers announce each new piece, as BitTorrent does</td></tr>
+<tr><td>Bitfields are refreshed only when a download is stuck, and the peer list is fetched once</td><td>Enough for this scale. A running download does not use peers that join later, or pieces a peer gained since it was asked.</td><td>Peers announce each new piece, as BitTorrent does; ask the tracker for peers again from time to time</td></tr>
 <tr><td>A file is identified by its name inside a group</td><td>Simple for users</td><td>Identify files by their hash</td></tr>
 <tr><td>Login attempts are not limited</td><td>Not required; each attempt already costs the tracker 0.15 s</td><td>Slow down or lock an account after repeated failures</td></tr>
 <tr><td>A stolen tracker key works until its certificate expires</td><td>There is no list of cancelled certificates</td><td>Short-lived certificates or a revocation list</td></tr>
